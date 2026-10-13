@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Capacitor Circuit Simulator with Dielectrics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkbg: '#0B0C10',
+                        cardbg: '#12141C',
+                        panelbg: '#181A26',
+                        accent: '#F59E0B',
+                        skyaccent: '#38BDF8',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        
+        body {
+            background-color: #0B0C10;
+            color: #E2E8F0;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            overflow-x: hidden;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .glass-card {
+            background: linear-gradient(135deg, rgba(26, 29, 41, 0.75) 0%, rgba(18, 20, 28, 0.88) 100%);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Rotary Knob Style */
+        .knob-container {
+            position: relative;
+            width: 80px;
+            height: 80px;
+            cursor: grab;
+            user-select: none;
+            touch-action: none;
+        }
+        .knob-container:active {
+            cursor: grabbing;
+        }
+        .knob-track {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: conic-gradient(from 210deg at 50% 50%, #F59E0B 0deg, #F59E0B var(--angle, 0deg), #262938 var(--angle, 0deg), #262938 300deg);
+            mask: radial-gradient(transparent 64%, black 67%);
+            -webkit-mask: radial-gradient(transparent 64%, black 67%);
+        }
+        .knob-handle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 64px;
+            height: 64px;
+            margin: -32px 0 0 -32px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #1f2330, #141620);
+            border: 2px solid #2d3345;
+            box-shadow: inset 0 2px 4px rgba(255,255,255,0.1), 0 6px 16px rgba(0,0,0,0.6);
+            transition: transform 0.04s linear;
+        }
+        .knob-indicator {
+            position: absolute;
+            top: 6px;
+            left: 50%;
+            width: 4px;
+            height: 12px;
+            margin-left: -2px;
+            background: #F59E0B;
+            border-radius: 2px;
+            box-shadow: 0 0 8px rgba(245, 158, 11, 0.8);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f1118;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #282c3f;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col p-3 sm:p-5 lg:p-8 text-slate-200">
+
+    <header class="max-w-7xl mx-auto w-full mb-6">
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div>
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-extrabold text-xl shadow-lg shadow-amber-500/10">
+                        ⚡
+                    </div>
+                    <div>
+                        <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-white flex items-center gap-2">
+                            Capacitor Circuit Studio
+                            <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">Dielectric Edition</span>
+                        </h1>
+                        <p class="text-xs text-slate-400">Interactive RC Circuit Lab with 10 Dielectric Materials & Real-Time Physics</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mode selector tabs -->
+            <div class="flex flex-wrap items-center gap-2 bg-[#141620] p-1.5 rounded-2xl border border-slate-800/80">
+                <button onclick="setSupplyMode('DC')" id="mode-dc-btn" class="px-4 py-2 rounded-xl text-xs font-bold transition-all bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 flex items-center gap-1.5">
+                    <span>🔋 DC Battery</span>
+                </button>
+                <button onclick="setSupplyMode('AC')" id="mode-ac-btn" class="px-4 py-2 rounded-xl text-xs font-bold transition-all bg-transparent text-slate-400 hover:text-white flex items-center gap-1.5">
+                    <span>〰️ AC Generator</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-6 flex-grow">
+
+        <section class="lg:col-span-8 flex flex-col gap-6">
+
+            <!-- Interactive Circuit Board Card -->
+            <div class="glass-card rounded-3xl p-5 sm:p-6 relative overflow-hidden flex flex-col justify-between min-h-[460px]">
+                
+                <!-- Circuit Board Screws -->
+                <div class="absolute top-3 left-3 w-3 h-3 rounded-full bg-slate-800 border border-slate-600 flex items-center justify-center"><div class="w-1 h-0.5 bg-slate-950"></div></div>
+                <div class="absolute top-3 right-3 w-3 h-3 rounded-full bg-slate-800 border border-slate-600 flex items-center justify-center"><div class="w-1 h-0.5 bg-slate-950"></div></div>
+                <div class="absolute bottom-3 left-3 w-3 h-3 rounded-full bg-slate-800 border border-slate-600 flex items-center justify-center"><div class="w-1 h-0.5 bg-slate-950"></div></div>
+                <div class="absolute bottom-3 right-3 w-3 h-3 rounded-full bg-slate-800 border border-slate-600 flex items-center justify-center"><div class="w-1 h-0.5 bg-slate-950"></div></div>
+
+                <!-- Top Controls & Status inside Board -->
+                <div class="flex flex-wrap items-center justify-between gap-3 z-10">
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs uppercase tracking-wider font-bold text-slate-400">Circuit Schematic</span>
+                        <span id="circuit-state-badge" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            Charging
+                        </span>
+                    </div>
+
+                    <!-- Action Triggers -->
+                    <div class="flex items-center gap-2">
+                        <button onclick="toggleSwitchState()" id="switch-btn" class="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold shadow-lg shadow-emerald-500/20 transition flex items-center gap-1.5">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                            <span id="switch-label">Switch: CLOSED</span>
+                        </button>
+
+                        <button onclick="dischargeCapacitor()" class="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-bold transition flex items-center gap-1.5">
+                            <span>⚡ Discharge</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Interactive Canvas for Circuit & Dielectric Parallel Plates -->
+                <div class="relative w-full h-72 my-2 rounded-2xl bg-[#0d0e14] border border-slate-800/80 overflow-hidden flex items-center justify-center shadow-inner">
+                    <canvas id="circuit-canvas" class="w-full h-full block"></canvas>
+                </div>
+
+                <!-- Live Metrics Footer inside Board -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t border-slate-800/80 z-10">
+                    <div class="bg-[#10121A] p-2.5 rounded-xl border border-slate-800/60">
+                        <span class="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Effective C ($C = \varepsilon_r C_0$)</span>
+                        <span id="stat-eff-c" class="text-sm font-extrabold text-sky-400 mono">100.0 µF</span>
+                    </div>
+                    <div class="bg-[#10121A] p-2.5 rounded-xl border border-slate-800/60">
+                        <span class="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Time Constant (τ)</span>
+                        <span id="stat-tau" class="text-sm font-extrabold text-amber-400 mono">1.00 s</span>
+                    </div>
+                    <div class="bg-[#10121A] p-2.5 rounded-xl border border-slate-800/60">
+                        <span class="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Stored Charge (Q)</span>
+                        <span id="stat-charge" class="text-sm font-extrabold text-emerald-400 mono">1200 µC</span>
+                    </div>
+                    <div class="bg-[#10121A] p-2.5 rounded-xl border border-slate-800/60">
+                        <span class="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Stored Energy (E)</span>
+                        <span id="stat-energy" class="text-sm font-extrabold text-amber-400 mono">7.20 mJ</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card rounded-3xl p-5 sm:p-6">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+                    <h3 class="text-sm font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
+                        <span>📚 Physics Formula Breakdown</span>
+                    </h3>
+                    <div class="flex gap-1.5 bg-[#141620] p-1 rounded-xl border border-slate-800">
+                        <button onclick="setFormulaView('dielectric')" id="fbtn-dielectric" class="px-3 py-1 rounded-lg text-xs font-bold transition bg-amber-500 text-slate-950">C = εᵣ × C₀</button>
+                        <button onclick="setFormulaView('q')" id="fbtn-q" class="px-3 py-1 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white">Q = C × V</button>
+                        <button onclick="setFormulaView('e')" id="fbtn-e" class="px-3 py-1 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white">E = ½ C V²</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-5 items-center">
+                    <!-- Interactive Visual Formula Display -->
+                    <div class="bg-[#0e1017] p-5 rounded-2xl border border-slate-800/80 flex flex-col items-center justify-center text-center relative">
+                        <div class="text-xs text-slate-400 uppercase font-semibold mb-2" id="formula-card-title">Dielectric Capacitance</div>
+                        <div id="formula-display" class="text-2xl font-black text-amber-400 mono tracking-wider my-2">
+                            C = εᵣ · C₀
+                        </div>
+                        <div id="formula-calc" class="text-xs text-slate-300 font-medium bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-lg mt-1 mono">
+                            100.0 µF = 1.0 × 100.0 µF
+                        </div>
+                    </div>
+
+                    <!-- Explanatory text -->
+                    <div class="md:col-span-2 text-xs text-slate-300 space-y-2.5 leading-relaxed">
+                        <p id="formula-explanation-text">
+                            Inserting a dielectric material polarizes molecular dipoles within the electric field between the capacitor plates, neutralizing surface charges near electrodes and increasing total capacitance by factor <strong class="text-amber-400">εᵣ</strong>.
+                        </p>
+                        <div class="grid grid-cols-2 gap-2 pt-1 font-mono text-[11px]">
+                            <div class="bg-[#141620] p-2 rounded-lg border border-slate-800">
+                                <span class="text-slate-400">Selected Material:</span> <span id="explain-mat" class="text-amber-400 font-bold">Vacuum (1.0)</span>
+                            </div>
+                            <div class="bg-[#141620] p-2 rounded-lg border border-slate-800">
+                                <span class="text-slate-400">Polarization Effect:</span> <span id="explain-polar" class="text-sky-400 font-bold">None</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <section class="lg:col-span-4 flex flex-col gap-6">
+
+            <!-- Dielectric Material Selector Card -->
+            <div class="glass-card rounded-3xl p-5 sm:p-6 flex flex-col gap-4">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <h3 class="text-sm font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
+                        <span>🧪 Dielectric Material</span>
+                    </h3>
+                    <span id="dielectric-badge" class="text-[11px] text-sky-400 font-bold bg-sky-500/10 px-2.5 py-0.5 rounded-full border border-sky-500/20">εᵣ = 1.0</span>
+                </div>
+
+                <div>
+                    <label class="text-xs font-bold text-slate-400 mb-1.5 block">Choose Dielectric Medium:</label>
+                    <select id="dielectric-select" onchange="onDielectricChange(this)" class="w-full bg-[#0e1017] border border-slate-800 text-slate-200 text-xs font-bold rounded-xl p-3 focus:outline-none focus:border-amber-500 transition">
+                        <option value="vacuum">Vacuum (εᵣ = 1.0)</option>
+                        <option value="air" selected>Air (εᵣ = 1.0006)</option>
+                        <option value="paraffin">Paraffin Paper (εᵣ = 2.2)</option>
+                        <option value="teflon">Teflon (εᵣ = 2.1)</option>
+                        <option value="benzene">Benzene (εᵣ = 2.3)</option>
+                        <option value="rubber">Rubber (εᵣ = 3.0)</option>
+                        <option value="plexiglas">Plexiglas (εᵣ = 3.4)</option>
+                        <option value="glass">Glass (εᵣ = 5.0)</option>
+                        <option value="germanium">Germanium (εᵣ = 16.0)</option>
+                        <option value="water">Distilled Water (εᵣ = 80.0)</option>
+                    </select>
+                </div>
+
+                <div class="text-[11px] text-slate-400 bg-[#0e1017] p-3 rounded-2xl border border-slate-800 leading-normal" id="dielectric-desc">
+                    <strong>Air / Vacuum:</strong> Standard reference baseline. Negligible polarization with minimal capacitance enhancement.
+                </div>
+            </div>
+
+            <!-- Interactive Parameters Panel -->
+            <div class="glass-card rounded-3xl p-5 sm:p-6 flex flex-col gap-5">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <h3 class="text-sm font-extrabold text-white uppercase tracking-wider">Circuit Knobs</h3>
+                    <span class="text-[11px] text-amber-400 font-semibold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">Drag Knobs</span>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3">
+                    <!-- Voltage Knob -->
+                    <div class="flex flex-col items-center bg-[#0e1017] p-3 rounded-2xl border border-slate-800">
+                        <span class="text-[11px] font-bold text-slate-400 mb-2">Voltage (V)</span>
+                        <div class="knob-container" id="knob-v">
+                            <div class="knob-track" id="track-v"></div>
+                            <div class="knob-handle" id="handle-v">
+                                <div class="knob-indicator"></div>
+                            </div>
+                        </div>
+                        <div class="mt-2.5 text-center">
+                            <span id="val-v" class="text-base font-black text-amber-400 mono">12.0</span>
+                            <span class="text-[10px] text-slate-500 font-bold">V</span>
+                        </div>
+                    </div>
+
+                    <!-- Capacitance Knob -->
+                    <div class="flex flex-col items-center bg-[#0e1017] p-3 rounded-2xl border border-slate-800">
+                        <span class="text-[11px] font-bold text-slate-400 mb-2">Base C₀</span>
+                        <div class="knob-container" id="knob-c">
+                            <div class="knob-track" id="track-c"></div>
+                            <div class="knob-handle" id="handle-c">
+                                <div class="knob-indicator"></div>
+                            </div>
+                        </div>
+                        <div class="mt-2.5 text-center">
+                            <span id="val-c" class="text-base font-black text-sky-400 mono">100</span>
+                            <span class="text-[10px] text-slate-500 font-bold">µF</span>
+                        </div>
+                    </div>
+
+                    <!-- Resistance Knob -->
+                    <div class="flex flex-col items-center bg-[#0e1017] p-3 rounded-2xl border border-slate-800">
+                        <span class="text-[11px] font-bold text-slate-400 mb-2">Resistor (R)</span>
+                        <div class="knob-container" id="knob-r">
+                            <div class="knob-track" id="track-r"></div>
+                            <div class="knob-handle" id="handle-r">
+                                <div class="knob-indicator"></div>
+                            </div>
+                        </div>
+                        <div class="mt-2.5 text-center">
+                            <span id="val-r" class="text-base font-black text-emerald-400 mono">10.0</span>
+                            <span class="text-[10px] text-slate-500 font-bold">kΩ</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Frequency Slider (Shown in AC mode) -->
+                <div id="ac-freq-container" class="hidden bg-[#0e1017] p-3 rounded-2xl border border-slate-800 flex flex-col gap-1.5">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="font-bold text-slate-400">AC Frequency ($f$)</span>
+                        <span id="val-freq" class="font-mono font-extrabold text-amber-400">2.0 Hz</span>
+                    </div>
+                    <input type="range" id="freq-range" min="0.5" max="10" step="0.1" value="2.0" class="w-full accent-amber-500 cursor-pointer">
+                </div>
+
+                <!-- Live Quick Readouts -->
+                <div class="space-y-2">
+                    <div class="flex justify-between items-center text-xs bg-[#0e1017] px-3 py-2.5 rounded-xl border border-slate-800">
+                        <span class="text-slate-400 font-medium">Instantaneous Current</span>
+                        <span id="val-i" class="font-mono font-bold text-amber-400">1.20 mA</span>
+                    </div>
+                    <div class="flex justify-between items-center text-xs bg-[#0e1017] px-3 py-2.5 rounded-xl border border-slate-800">
+                        <span class="text-slate-400 font-medium">Plate Voltage ($V_c$)</span>
+                        <span id="val-vc" class="font-mono font-bold text-sky-400">0.00 V</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card rounded-3xl p-5 sm:p-6 flex flex-col">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
+                        <span>📈 Oscilloscope</span>
+                    </h3>
+                    <div class="flex items-center gap-2 text-[10px]">
+                        <span class="flex items-center gap-1 text-sky-400 font-bold"><span class="w-2 h-2 rounded-full bg-sky-400"></span> Vc</span>
+                        <span class="flex items-center gap-1 text-amber-400 font-bold"><span class="w-2 h-2 rounded-full bg-amber-400"></span> Current</span>
+                    </div>
+                </div>
+
+                <!-- Graph Canvas -->
+                <div class="relative w-full h-40 bg-[#0c0d12] rounded-2xl border border-slate-800/90 overflow-hidden shadow-inner">
+                    <canvas id="graph-canvas" class="w-full h-full block"></canvas>
+                </div>
+            </div>
+
+            <div class="glass-card rounded-3xl p-5 sm:p-6">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-sm font-extrabold text-white uppercase tracking-wider">Physics Challenge</h3>
+                    <span id="challenge-badge" class="text-xs bg-amber-500/10 text-amber-400 font-bold px-2.5 py-0.5 rounded-full border border-amber-500/20">
+                        Level 1 / 3
+                    </span>
+                </div>
+                <p id="challenge-prompt" class="text-xs text-slate-300 leading-relaxed mb-4">
+                    Select <strong class="text-amber-400">Glass</strong> as dielectric and adjust capacitance to store exactly <strong class="text-amber-400">30.0 mJ</strong> (±1.5 mJ).
+                </p>
+
+                <div class="flex items-center gap-2">
+                    <button onclick="checkChallengeSolution()" class="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs rounded-xl shadow-lg shadow-amber-500/20 transition">
+                        Verify Setup
+                    </button>
+                    <button onclick="skipChallenge()" class="px-3.5 py-2.5 bg-[#181a26] hover:bg-[#202434] text-slate-300 font-bold text-xs rounded-xl border border-slate-800 transition">
+                        Next
+                    </button>
+                </div>
+
+                <div id="challenge-feedback" class="mt-3 text-xs text-center font-bold min-h-[18px]"></div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <script>
+        /* ==========================================================================
+           SIMULATION STATE & DIELECTRIC DATA PROPERTIES
+           ========================================================================== */
+        const dielectricsData = {
+            vacuum:    { name: 'Vacuum',          er: 1.0000, color: 'rgba(255, 255, 255, 0.05)', desc: 'Absolute vacuum reference. Zero molecular polarization.' },
+            air:       { name: 'Air',             er: 1.0006, color: 'rgba(56, 189, 248, 0.08)',  desc: 'Standard atmospheric air. Negligible polarization effect.' },
+            paraffin:  { name: 'Paraffin Paper',  er: 2.2000, color: 'rgba(245, 158, 11, 0.22)',  desc: 'Wax-impregnated paper insulator. Moderate dielectric strength.' },
+            teflon:    { name: 'Teflon',          er: 2.1000, color: 'rgba(251, 191, 36, 0.20)',  desc: 'Fluoropolymer resin with stable polarization properties.' },
+            benzene:   { name: 'Benzene',         er: 2.3000, color: 'rgba(52, 211, 153, 0.22)',  desc: 'Non-polar hydrocarbon liquid dielectric medium.' },
+            rubber:    { name: 'Rubber',          er: 3.0000, color: 'rgba(168, 85, 247, 0.22)',  desc: 'Elastomer dielectric with higher charge-holding capacity.' },
+            plexiglas: { name: 'Plexiglas',       er: 3.4000, color: 'rgba(236, 72, 153, 0.22)',  desc: 'Transparent acrylic thermoplastic dielectric sheet.' },
+            glass:     { name: 'Glass',           er: 5.0000, color: 'rgba(59, 130, 246, 0.25)',  desc: 'Silicate glass insulator providing strong dielectric response.' },
+            germanium: { name: 'Germanium',       er: 16.000, color: 'rgba(239, 68, 68, 0.25)',   desc: 'Semiconducting crystal with high relative permittivity.' },
+            water:     { name: 'Distilled Water', er: 80.000, color: 'rgba(14, 165, 233, 0.35)',  desc: 'Polar molecular liquid with extremely high permittivity (εᵣ = 80).' }
+        };
+
+        const state = {
+            supplyMode: 'DC',        // 'DC' or 'AC'
+            switchClosed: true,
+            voltage: 12.0,           // Volts
+            baseCapacitance: 100.0,  // Base C0 in µF
+            resistance: 10.0,        // Kilohms (kΩ)
+            acFreq: 2.0,             // Hz
+            dielectricKey: 'air',    // Current dielectric
+            
+            // Dynamic Variables
+            effCapacitance: 100.6,   // er * baseCapacitance
+            vc: 0.0,                 // Voltage across capacitor
+            current: 0.0,            // Amperes (mA)
+            charge: 0.0,             // Microcoulombs (µC)
+            energy: 0.0,             // Millijoules (mJ)
+            tau: 1.0,                // Seconds
+            
+            // Animation Particles & Timing
+            particles: [],
+            numParticles: 32,
+            simTime: 0,
+            
+            // History for Graphing
+            historyVc: [],
+            historyCurrent: [],
+            maxHistory: 120,
+
+            // Formula view
+            formulaMode: 'dielectric',
+
+            // Challenges
+            challengeIdx: 0,
+            challenges: [
+                {
+                    prompt: "Select <strong>Glass</strong> as dielectric and adjust base capacitance so stored energy reaches exactly <strong>30.0 mJ</strong> (±2.0 mJ).",
+                    check: () => state.dielectricKey === 'glass' && Math.abs(state.energy - 30.0) <= 2.0
+                },
+                {
+                    prompt: "Select <strong>Distilled Water</strong> and set Resistance to <strong>5.0 kΩ</strong> to observe the massive time constant.",
+                    check: () => state.dielectricKey === 'water' && Math.abs(state.resistance - 5.0) <= 0.2
+                },
+                {
+                    prompt: "Using <strong>Teflon</strong>, set Voltage to <strong>20.0 V</strong> and achieve a stored charge above <strong>4000 µC</strong>.",
+                    check: () => state.dielectricKey === 'teflon' && state.voltage >= 20.0 && state.charge >= 4000
+                }
+            ]
+        };
+
+        /* Initialize particles around wire loop */
+        function initParticles() {
+            state.particles = [];
+            for (let i = 0; i < state.numParticles; i++) {
+                state.particles.push({ progress: i / state.numParticles });
+            }
+        }
+
+        /* ==========================================================================
+           INTERACTIVE KNOB SETUP
+           ========================================================================== */
+        function setupKnob(id, min, max, step, initial, onChange) {
+            const container = document.getElementById(`knob-${id}`);
+            const handle = document.getElementById(`handle-${id}`);
+            const track = document.getElementById(`track-${id}`);
+            
+            let val = initial;
+
+            const updateVisuals = (v) => {
+                const ratio = (v - min) / (max - min);
+                const angle = ratio * 300;
+                handle.style.transform = `rotate(${angle}deg)`;
+                track.style.setProperty('--angle', `${angle}deg`);
+            };
+
+            updateVisuals(val);
+
+            let isDragging = false;
+            let startY = 0;
+            let startVal = val;
+
+            const onStart = (e) => {
+                isDragging = true;
+                startY = e.clientY || (e.touches && e.touches[0].clientY) || 0;
+                startVal = val;
+                e.preventDefault();
+            };
+
+            const onMove = (e) => {
+                if (!isDragging) return;
+                const clientY = e.clientY || (e.touches && e.touches[0].clientY) || 0;
+                const deltaY = startY - clientY;
+                const range = max - min;
+                const newValue = Math.min(max, Math.max(min, startVal + (deltaY / 150) * range));
+                
+                val = Math.round(newValue / step) * step;
+                updateVisuals(val);
+                onChange(val);
+            };
+
+            const onEnd = () => { isDragging = false; };
+
+            container.addEventListener('mousedown', onStart);
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onEnd);
+            container.addEventListener('touchstart', onStart, { passive: false });
+            window.addEventListener('touchmove', onMove, { passive: false });
+            window.addEventListener('touchend', onEnd);
+        }
+
+        /* ==========================================================================
+           EVENT HANDLERS & MODES
+           ========================================================================== */
+        function setSupplyMode(mode) {
+            state.supplyMode = mode;
+            const dcBtn = document.getElementById('mode-dc-btn');
+            const acBtn = document.getElementById('mode-ac-btn');
+            const freqContainer = document.getElementById('ac-freq-container');
+
+            if (mode === 'DC') {
+                dcBtn.className = "px-4 py-2 rounded-xl text-xs font-bold transition-all bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 flex items-center gap-1.5";
+                acBtn.className = "px-4 py-2 rounded-xl text-xs font-bold transition-all bg-transparent text-slate-400 hover:text-white flex items-center gap-1.5";
+                freqContainer.classList.add('hidden');
+            } else {
+                acBtn.className = "px-4 py-2 rounded-xl text-xs font-bold transition-all bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 flex items-center gap-1.5";
+                dcBtn.className = "px-4 py-2 rounded-xl text-xs font-bold transition-all bg-transparent text-slate-400 hover:text-white flex items-center gap-1.5";
+                freqContainer.classList.remove('hidden');
+            }
+        }
+
+        function toggleSwitchState() {
+            state.switchClosed = !state.switchClosed;
+            const btn = document.getElementById('switch-btn');
+            const lbl = document.getElementById('switch-label');
+            
+            if (state.switchClosed) {
+                btn.className = "px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold shadow-lg shadow-emerald-500/20 transition flex items-center gap-1.5";
+                lbl.innerText = "Switch: CLOSED";
+            } else {
+                btn.className = "px-3.5 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-xs font-extrabold shadow-lg transition flex items-center gap-1.5";
+                lbl.innerText = "Switch: OPEN";
+            }
+        }
+
+        function dischargeCapacitor() {
+            state.vc = 0;
+            state.historyVc = [];
+            state.historyCurrent = [];
+        }
+
+        function onDielectricChange(select) {
+            state.dielectricKey = select.value;
+            const d = dielectricsData[state.dielectricKey];
+            document.getElementById('dielectric-badge').innerText = `εᵣ = ${d.er}`;
+            document.getElementById('dielectric-desc').innerHTML = `<strong>${d.name}:</strong> ${d.desc}`;
+            updateFormulaDisplay();
+        }
+
+        function setFormulaView(mode) {
+            state.formulaMode = mode;
+            ['dielectric', 'q', 'e'].forEach(m => {
+                const btn = document.getElementById(`fbtn-${m}`);
+                if (m === mode) {
+                    btn.className = "px-3 py-1 rounded-lg text-xs font-bold transition bg-amber-500 text-slate-950";
+                } else {
+                    btn.className = "px-3 py-1 rounded-lg text-xs font-bold transition text-slate-400 hover:text-white";
+                }
+            });
+            updateFormulaDisplay();
+        }
+
+        function updateFormulaDisplay() {
+            const title = document.getElementById('formula-card-title');
+            const disp = document.getElementById('formula-display');
+            const calc = document.getElementById('formula-calc');
+            const expl = document.getElementById('formula-explanation-text');
+            const d = dielectricsData[state.dielectricKey];
+
+            if (state.formulaMode === 'dielectric') {
+                title.innerText = "Dielectric Capacitance";
+                disp.innerText = "C = εᵣ · C₀";
+                calc.innerText = `${state.effCapacitance.toFixed(1)} µF = ${d.er} × ${state.baseCapacitance.toFixed(0)} µF`;
+                expl.innerText = `When ${d.name} (εᵣ = ${d.er}) is inserted, molecular polarization creates internal opposing fields, increasing charge storage capacity by ${d.er}x.`;
+            } else if (state.formulaMode === 'q') {
+                title.innerText = "Stored Charge (Q)";
+                disp.innerText = "Q = C · V";
+                calc.innerText = `${state.charge.toFixed(0)} µC = ${state.effCapacitance.toFixed(1)} µF × ${state.voltage.toFixed(1)} V`;
+                expl.innerText = "Total charge accumulated on capacitor plates depends directly on effective capacitance and applied voltage.";
+            } else if (state.formulaMode === 'e') {
+                title.innerText = "Stored Energy (E)";
+                disp.innerText = "E = ½ C V²";
+                calc.innerText = `${state.energy.toFixed(2)} mJ = ½ × ${state.effCapacitance.toFixed(1)}µF × (${state.voltage.toFixed(1)}V)²`;
+                expl.innerText = "Energy is stored within the electrostatic field across the dielectric medium.";
+            }
+
+            document.getElementById('explain-mat').innerText = `${d.name} (${d.er})`;
+            document.getElementById('explain-polar').innerText = d.er > 5 ? "Strong Polarization" : (d.er > 2 ? "Moderate" : "Minimal");
+        }
+
+        /* ==========================================================================
+           PHYSICS SIMULATION STEP
+           ========================================================================== */
+        let lastTime = performance.now();
+
+        function stepPhysics(dt) {
+            const d = dielectricsData[state.dielectricKey];
+            state.effCapacitance = state.baseCapacitance * d.er;
+
+            const C_farads = state.effCapacitance * 1e-6;
+            const R_ohms = state.resistance * 1000;
+            state.tau = R_ohms * C_farads;
+
+            let targetVoltage = 0;
+            if (state.supplyMode === 'DC') {
+                targetVoltage = state.switchClosed ? state.voltage : 0;
+            } else {
+                state.simTime += dt;
+                targetVoltage = state.switchClosed ? state.voltage * Math.sin(2 * Math.PI * state.acFreq * state.simTime) : 0;
+            }
+
+            if (state.switchClosed || state.vc > 0) {
+                const dVc = ((targetVoltage - state.vc) / state.tau) * dt;
+                state.vc += dVc;
+            }
+
+            const currentAmps = (targetVoltage - state.vc) / R_ohms;
+            state.current = currentAmps * 1000; // mA
+
+            state.charge = state.effCapacitance * state.vc; // µC
+            state.energy = 0.5 * C_farads * Math.pow(state.vc, 2) * 1000; // mJ
+
+            state.historyVc.push(state.vc);
+            state.historyCurrent.push(state.current);
+            if (state.historyVc.length > state.maxHistory) {
+                state.historyVc.shift();
+                state.historyCurrent.shift();
+            }
+        }
+
+        /* ==========================================================================
+           CANVAS RENDERER (Circuit, Parallel Plates, Dielectric Slider, Particles)
+           ========================================================================== */
+        function renderCircuitCanvas() {
+            const canvas = document.getElementById('circuit-canvas');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.clientWidth;
+            const height = canvas.clientHeight;
+
+            if (canvas.width !== width || canvas.height !== height) {
+                canvas.width = width;
+                canvas.height = height;
+            }
+
+            ctx.clearRect(0, 0, width, height);
+
+            const padX = 70;
+            const padY = 50;
+            const wireW = width - padX * 2;
+            const wireH = height - padY * 2;
+
+            // Wire Path
+            ctx.strokeStyle = '#282d3f';
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.roundRect(padX, padY, wireW, wireH, 16);
+            ctx.stroke();
+
+            const absCurrent = Math.abs(state.current);
+            if (absCurrent > 0.01 && state.switchClosed) {
+                ctx.strokeStyle = 'rgba(245, 158, 11, 0.25)';
+                ctx.lineWidth = 8;
+                ctx.stroke();
+            }
+
+            /* --- 1. Battery / AC Source --- */
+            const srcX = padX;
+            const srcY = padY + wireH / 2;
+            ctx.clearRect(srcX - 18, srcY - 24, 36, 48);
+            ctx.fillStyle = '#141620';
+            ctx.strokeStyle = '#3b4259';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(srcX - 18, srcY - 24, 36, 48, 8);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#F59E0B';
+            ctx.font = 'bold 11px "Plus Jakarta Sans"';
+            ctx.textAlign = 'center';
+            if (state.supplyMode === 'DC') {
+                ctx.fillText(`${state.voltage.toFixed(1)}V`, srcX, srcY + 4);
+            } else {
+                ctx.fillText(`〰️ AC`, srcX, srcY + 4);
+            }
+
+            /* --- 2. Resistor --- */
+            const resX = padX + wireW * 0.35;
+            const resY = padY;
+            ctx.clearRect(resX - 22, resY - 10, 44, 20);
+            ctx.fillStyle = '#181b26';
+            ctx.strokeStyle = '#10B981';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(resX - 22, resY - 10, 44, 20, 6);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = '#10B981';
+            ctx.font = 'bold 9px "JetBrains Mono"';
+            ctx.fillText(`${state.resistance.toFixed(1)}kΩ`, resX, resY + 3);
+
+            /* --- 3. Parallel Plates with Dielectric Insert --- */
+            const capX = padX + wireW * 0.72;
+            const capY = padY;
+            const plateGap = 22;
+            const plateH = 50;
+
+            ctx.clearRect(capX - 26, capY - plateH/2 - 6, 52, plateH + 12);
+
+            const dObj = dielectricsData[state.dielectricKey];
+
+            // Dielectric Slab inside plates
+            ctx.fillStyle = dObj.color;
+            ctx.fillRect(capX - plateGap/2, capY - plateH/2, plateGap, plateH);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(capX - plateGap/2, capY - plateH/2, plateGap, plateH);
+
+            // Polarization molecular dipoles visual if er > 1.2
+            if (dObj.er > 1.2 && Math.abs(state.vc) > 0.5) {
+                ctx.fillStyle = 'rgba(56, 189, 248, 0.6)';
+                ctx.font = '8px monospace';
+                ctx.fillText("+ -", capX - 4, capY - 12);
+                ctx.fillText("+ -", capX - 4, capY + 4);
+                ctx.fillText("+ -", capX - 4, capY + 20);
+            }
+
+            // Electric Field Lines
+            const fieldIntensity = Math.min(1, Math.abs(state.vc) / Math.max(1, state.voltage));
+            if (fieldIntensity > 0.05) {
+                ctx.strokeStyle = `rgba(56, 189, 248, ${0.3 + fieldIntensity * 0.7})`;
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([2, 3]);
+                for (let y = capY - plateH/2 + 8; y <= capY + plateH/2 - 8; y += 8) {
+                    ctx.beginPath();
+                    ctx.moveTo(capX - plateGap/2 + 2, y);
+                    ctx.lineTo(capX + plateGap/2 - 2, y);
+                    ctx.stroke();
+                }
+                ctx.setLineDash([]);
+            }
+
+            // Left Plate (+)
+            const leftPlateGrad = ctx.createLinearGradient(capX - plateGap/2 - 6, 0, capX - plateGap/2, 0);
+            leftPlateGrad.addColorStop(0, '#475569');
+            leftPlateGrad.addColorStop(0.5, '#cbd5e1');
+            leftPlateGrad.addColorStop(1, '#334155');
+            ctx.fillStyle = leftPlateGrad;
+            ctx.strokeStyle = '#38BDF8';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(capX - plateGap/2 - 6, capY - plateH/2, 6, plateH, 3);
+            ctx.fill();
+            ctx.stroke();
+
+            // Right Plate (-)
+            ctx.beginPath();
+            ctx.roundRect(capX + plateGap/2, capY - plateH/2, 6, plateH, 3);
+            ctx.fill();
+            ctx.strokeStyle = '#F43F5E';
+            ctx.stroke();
+
+            // Charge Signs
+            ctx.font = 'bold 9px monospace';
+            if (state.vc > 0.5) {
+                ctx.fillStyle = '#38BDF8';
+                ctx.fillText('+', capX - plateGap/2 - 12, capY - 10);
+                ctx.fillText('+', capX - plateGap/2 - 12, capY + 12);
+                ctx.fillStyle = '#F43F5E';
+                ctx.fillText('-', capX + plateGap/2 + 10, capY - 10);
+                ctx.fillText('-', capX + plateGap/2 + 10, capY + 12);
+            }
+
+            // Capacitor & Dielectric Label
+            ctx.fillStyle = '#38BDF8';
+            ctx.font = 'bold 9px "JetBrains Mono"';
+            ctx.fillText(`${dObj.name} (${state.effCapacitance.toFixed(0)}µF)`, capX, capY - plateH/2 - 8);
+
+            /* --- 4. Light Bulb --- */
+            const bulbX = padX + wireW;
+            const bulbY = padY + wireH / 2;
+            ctx.clearRect(bulbX - 22, bulbY - 22, 44, 44);
+
+            const glowOpacity = Math.min(1, absCurrent / 1.5);
+            if (glowOpacity > 0.02) {
+                const radialGlow = ctx.createRadialGradient(bulbX, bulbY, 2, bulbX, bulbY, 28);
+                radialGlow.addColorStop(0, `rgba(245, 158, 11, ${glowOpacity * 0.8})`);
+                radialGlow.addColorStop(1, 'rgba(245, 158, 11, 0)');
+                ctx.fillStyle = radialGlow;
+                ctx.beginPath();
+                ctx.arc(bulbX, bulbY, 28, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.fillStyle = '#141620';
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(bulbX, bulbY, 16, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.strokeStyle = glowOpacity > 0.1 ? '#F59E0B' : '#64748B';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(bulbX - 6, bulbY + 8);
+            ctx.lineTo(bulbX - 3, bulbY - 4);
+            ctx.lineTo(bulbX + 3, bulbY - 4);
+            ctx.lineTo(bulbX + 6, bulbY + 8);
+            ctx.stroke();
+
+            /* --- 5. Animated Charge Particles --- */
+            if (state.switchClosed && absCurrent > 0.001) {
+                const flowDir = state.current >= 0 ? 1 : -1;
+                const speed = (absCurrent / 1.5) * 0.015;
+
+                ctx.fillStyle = '#F59E0B';
+                state.particles.forEach(p => {
+                    p.progress += speed * flowDir;
+                    if (p.progress > 1) p.progress -= 1;
+                    if (p.progress < 0) p.progress += 1;
+
+                    const pos = getPerimeterPos(p.progress, padX, padY, wireW, wireH);
+                    ctx.beginPath();
+                    ctx.arc(pos.x, pos.y, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            }
+        }
+
+        function getPerimeterPos(prog, x, y, w, h) {
+            const total = (w + h) * 2;
+            let d = prog * total;
+            if (d <= w) return { x: x + d, y: y };
+            d -= w;
+            if (d <= h) return { x: x + w, y: y + d };
+            d -= h;
+            if (d <= w) return { x: x + w - d, y: y + h };
+            d -= w;
+            return { x: x, y: y + h - d };
+        }
+
+        /* ==========================================================================
+           OSCILLOSCOPE GRAPH RENDERER
+           ========================================================================== */
+        function renderGraphCanvas() {
+            const canvas = document.getElementById('graph-canvas');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.clientWidth;
+            const height = canvas.clientHeight;
+
+            if (canvas.width !== width || canvas.height !== height) {
+                canvas.width = width;
+                canvas.height = height;
+            }
+
+            ctx.clearRect(0, 0, width, height);
+
+            ctx.strokeStyle = '#1a1d29';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let x = 0; x < width; x += 24) { ctx.moveTo(x, 0); ctx.lineTo(x, height); }
+            for (let y = 0; y < height; y += 20) { ctx.moveTo(0, y); ctx.lineTo(width, y); }
+            ctx.stroke();
+
+            if (state.historyVc.length < 2) return;
+
+            // Vc Curve (Sky Blue)
+            ctx.strokeStyle = '#38BDF8';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            const stepX = width / (state.maxHistory - 1);
+
+            for (let i = 0; i < state.historyVc.length; i++) {
+                const x = i * stepX;
+                const normV = Math.max(-1, Math.min(1, state.historyVc[i] / 50.0));
+                const y = height / 2 - normV * (height / 2.4);
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            // Current Curve (Amber)
+            ctx.strokeStyle = '#F59E0B';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let i = 0; i < state.historyCurrent.length; i++) {
+                const x = i * stepX;
+                const normI = Math.max(-1, Math.min(1, state.historyCurrent[i] / 5.0));
+                const y = height / 2 - normI * (height / 2.4);
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        }
+
+        /* ==========================================================================
+           UI READOUTS & CHALLENGES
+           ========================================================================== */
+        function updateDOMReadouts() {
+            document.getElementById('val-v').innerText = state.voltage.toFixed(1);
+            document.getElementById('val-c').innerText = state.baseCapacitance.toFixed(0);
+            document.getElementById('val-r').innerText = state.resistance.toFixed(1);
+            document.getElementById('val-i').innerText = `${state.current.toFixed(2)} mA`;
+            document.getElementById('val-vc').innerText = `${state.vc.toFixed(2)} V`;
+
+            document.getElementById('stat-eff-c').innerText = `${state.effCapacitance.toFixed(1)} µF`;
+            document.getElementById('stat-tau').innerText = `${state.tau.toFixed(2)} s`;
+            document.getElementById('stat-charge').innerText = `${state.charge.toFixed(0)} µC`;
+            document.getElementById('stat-energy').innerText = `${state.energy.toFixed(2)} mJ`;
+
+            const badge = document.getElementById('circuit-state-badge');
+            if (!state.switchClosed) {
+                badge.innerText = "Switch Open";
+                badge.className = "px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-800 text-slate-400 border border-slate-700";
+            } else if (Math.abs(state.vc) >= state.voltage * 0.98) {
+                badge.innerText = "Saturated (Charged)";
+                badge.className = "px-2.5 py-1 rounded-lg text-[11px] font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20";
+            } else {
+                badge.innerText = "Charging / Flowing";
+                badge.className = "px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20";
+            }
+
+            updateFormulaDisplay();
+        }
+
+        function checkChallengeSolution() {
+            const ch = state.challenges[state.challengeIdx];
+            const feedback = document.getElementById('challenge-feedback');
+
+            if (ch.check()) {
+                feedback.className = "mt-3 text-xs text-center font-bold text-emerald-400";
+                feedback.innerText = "🎉 Fantastic! Challenge Requirement Solved.";
+            } else {
+                feedback.className = "mt-3 text-xs text-center font-bold text-rose-400";
+                feedback.innerText = "❌ Not quite right. Adjust voltage, resistance, or dielectric material!";
+            }
+        }
+
+        function skipChallenge() {
+            state.challengeIdx = (state.challengeIdx + 1) % state.challenges.length;
+            const ch = state.challenges[state.challengeIdx];
+            document.getElementById('challenge-prompt').innerHTML = ch.prompt;
+            document.getElementById('challenge-badge').innerText = `Level ${state.challengeIdx + 1} / ${state.challenges.length}`;
+            document.getElementById('challenge-feedback').innerText = "";
+        }
+
+        /* ==========================================================================
+           ANIMATION LOOP
+           ========================================================================== */
+        function mainLoop(now) {
+            const dt = Math.min(0.05, (now - lastTime) / 1000);
+            lastTime = now;
+
+            stepPhysics(dt);
+            renderCircuitCanvas();
+            renderGraphCanvas();
+            updateDOMReadouts();
+
+            requestAnimationFrame(mainLoop);
+        }
+
+        window.onload = function() {
+            initParticles();
+
+            setupKnob('v', 1, 50, 0.5, state.voltage, (val) => { state.voltage = val; });
+            setupKnob('c', 10, 1000, 10, state.baseCapacitance, (val) => { state.baseCapacitance = val; });
+            setupKnob('r', 1, 50, 0.5, state.resistance, (val) => { state.resistance = val; });
+
+            document.getElementById('freq-range').addEventListener('input', (e) => {
+                state.acFreq = parseFloat(e.target.value);
+                document.getElementById('val-freq').innerText = `${state.acFreq.toFixed(1)} Hz`;
+            });
+
+            requestAnimationFrame(mainLoop);
+        };
+    </script>
+</body>
+</html>
